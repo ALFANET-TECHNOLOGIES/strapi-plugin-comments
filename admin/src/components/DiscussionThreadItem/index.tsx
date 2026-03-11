@@ -4,7 +4,9 @@ import styled from 'styled-components';
 import { DiscussionThreadItemActions } from './DiscussionThreadItemActions';
 import { DiscussionThreadItemFooter } from './DiscussionThreadItemFooter';
 import { DiscussionThreadItemProps } from './props';
-
+import { Divider } from '@strapi/design-system';
+import { useSanitizedHTML } from '../../hooks/useSanitizedHTML';
+import {MultiLineContent} from '../MultiLineContent/MultiLineContent';
 
 export const DiscussionThreadItemContentTypographyRenderer = styled('div')(() => {
   return {
@@ -26,6 +28,9 @@ export const DiscussionThreadItemContentTypographyRenderer = styled('div')(() =>
 
 export const DiscussionThreadItem: FC<PropsWithChildren<DiscussionThreadItemProps>> = (props) => {
   const { root, preview, item, isSelected, pinned, as = 'li' } = props;
+
+  const html = useSanitizedHTML(item.content);
+
   return (
     <Box width="100%" as={as} marginBottom={preview ? 4 : 0}>
       <Flex
@@ -46,13 +51,18 @@ export const DiscussionThreadItem: FC<PropsWithChildren<DiscussionThreadItemProp
           gap={2}
           width="100%"
         >
-          <Flex width="100%" justifyContent="space-between" marginTop="6px">
+          <Flex
+            width="100%"
+            justifyContent="space-between"
+            marginTop={{ initial: 0, medium: 1.5}}
+            direction={{ initial: 'column-reverse', medium: 'row' }}
+            alignItems={{ initial: 'flex-start', medium: 'center' }}
+            gap={{ initial: 2, medium: 1}}
+          >
             <Flex grow={1} alignItems="center">
-              <Typography variant="omega" textColor="neutral800">
-                {/* TODO dangerouslySetInnerHTML in case of comments created by users is not safe
-                and can cause XSS attacks. We need to sanitize the content before displaying it. */}
-                <DiscussionThreadItemContentTypographyRenderer dangerouslySetInnerHTML={{ __html: item.content }} />
-              </Typography>
+              <MultiLineContent>
+                { item.content }
+              </MultiLineContent>
             </Flex>
             {!preview && (
               <DiscussionThreadItemActions

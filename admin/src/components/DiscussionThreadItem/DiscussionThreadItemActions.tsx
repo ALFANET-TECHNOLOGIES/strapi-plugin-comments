@@ -41,6 +41,8 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
 
   const api = useAPI();
   const { canModerate, canAccessReports, canReviewReports } = usePermissions();
+  const canApprove = approvalStatus !== 'APPROVED';
+  const canReject = approvalStatus !== 'REJECTED';
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -58,8 +60,6 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
     comment: {
       blockSuccess: onSuccess,
       unBlockSuccess: onSuccess,
-      blockThreadSuccess: onSuccess,
-      unBlockThreadSuccess: onSuccess,
       deleteSuccess: onSuccess,
     },
   });
@@ -68,19 +68,10 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
 
   const gotApprovalFlow = !isNil(approvalStatus);
   const needsApproval = !isAdminComment && gotApprovalFlow && approvalStatus === COMMENT_STATUS.PENDING;
-  const isBlocked = blocked || blockedThread;
-  const isRejected = gotApprovalFlow && approvalStatus === COMMENT_STATUS.REJECTED;
   const openReports = reports?.filter((_) => !_.resolved);
   const hasReports = !isEmpty(openReports);
   const reviewFlowEnabled = (canAccessReports || canReviewReports) && hasReports;
   const hasActiveThread = gotThread && !(removed || preview || pinned || blockedThread);
-  const isStatusBadgeVisible = isBlocked || reviewFlowEnabled;
-
-  const isLoading =
-    commentMutation.unBlock.isPending ||
-    commentMutation.block.isPending ||
-    commentMutation.blockThread.isPending ||
-    commentMutation.unBlockThread.isPending;
 
   const handleUnblockThreadClick = () => {
     commentMutation.unBlockThread.mutate(id);
@@ -106,9 +97,9 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
     }
   };
 
-  if (removed || isRejected || !canModerate) {
+  if (removed || !canModerate) {
     return (
-      <Flex direction="row" marginLeft={1} alignItems="flex-start">
+      <Flex direction="row" alignItems="flex-start">
         <CommentStatusBadge
           item={item}
           canAccessReports={canAccessReports}
@@ -124,15 +115,13 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
   const isRemovable = !blockedThread && !blocked && isAdminAuthor;
   const isThreadStartEnabled = !hasActiveThread && !pinned && (!blockedThread && !blocked);
   return (
-    <>
+    <Flex direction="column" gap={2} alignItems="flex-end">
+      <CommentStatusBadge
+        item={item}
+        canAccessReports={canAccessReports}
+        hasReports={hasReports}
+      />
       <Flex direction="row" marginLeft={1} alignItems="flex-start">
-        {isStatusBadgeVisible && (
-          <CommentStatusBadge
-            item={item}
-            canAccessReports={canAccessReports}
-            hasReports={hasReports}
-          />
-        )}
         {!blockedThread && (gotThread || pinned) && (
           <ConfirmationDialog
             title={getMessage(
@@ -145,12 +134,12 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
               'components.confirmation.dialog.button.cancel',
               'Cancel',
             )}
-            iconConfirm={<Lock />}
+            iconConfirm={<Lock/>}
             onConfirm={handleOnConfirm}
-            Trigger={({ onClick }) => (
+            Trigger={({onClick}) => (
               <ActionButton
                 onClick={onClick}
-                startIcon={<Lock />}
+                startIcon={<Lock/>}
                 loading={commentMutation.unBlockThread.isPending}
                 variant="danger"
               >
@@ -168,7 +157,7 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
         {blockedThread && (gotThread || pinned) && (
           <ActionButton
             onClick={handleUnblockThreadClick}
-            startIcon={<UnlockIcon />}
+            startIcon={<UnlockIcon/>}
             loading={commentMutation.unBlockThread.isPending}
             variant="success"
           >
@@ -178,6 +167,8 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
             )}
           </ActionButton>
         )}
+      </Flex>
+      <Flex direction="row" marginLeft={1} alignItems="flex-start">
         {anyGroupButtonsVisible && (
           <IconButtonGroup isSingle withMargin>
             {!isAdminComment && (
@@ -195,13 +186,13 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
                       'Cancel',
                     )}
                     onConfirm={handleBlockConfirm}
-                    Trigger={({ onClick }) => (
+                    Trigger={({onClick}) => (
                       <IconButton
                         onClick={onClick}
                         loading={commentMutation.block.isPending}
                         label={getMessage('page.details.actions.comment.block')}
                       >
-                        <Lock />
+                        <Lock/>
                       </IconButton>
                     )}
                   >
@@ -216,7 +207,7 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
                     loading={commentMutation.block.isPending}
                     label={getMessage('page.details.actions.comment.unblock')}
                   >
-                    <UnlockIcon />
+                    <UnlockIcon/>
                   </IconButton>
                 )}
               </>
@@ -225,10 +216,12 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
               <ApproveFlow
                 id={id}
                 canModerate={canModerate}
+                canApprove={needsApproval || canApprove}
+                canReject={needsApproval || canReject}
                 queryKey={api.comments.findOne.getKey(id)}
               />
             )}
-            {isAdminAuthor && !isBlocked && (
+            {(
               <ModeratorResponseModal
                 content={content}
                 id={id}
@@ -244,7 +237,7 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
                 loading={commentMutation.delete.isPending}
                 label={getMessage('page.details.actions.comment.delete')}
               >
-                <Trash />
+                <Trash/>
               </IconButton>
             )}
             <ReviewFlow
@@ -252,17 +245,17 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
             />
           </IconButtonGroup>
         )}
-        {hasActiveThread && (
+        {(
           <IconButtonGroup isSingle withMargin>
             <IconButton
               onClick={handleDrillDownClick}
               label={getMessage('page.details.panel.discussion.nav.drilldown')}
               style={
                 blocked && !blockedThread
-                  ? { marginTop: '1px', marginRight: '.5rem' }
+                  ? {marginTop: '1px', marginRight: '.5rem'}
                   : {}
               }>
-              <Eye />
+              <Eye/>
             </IconButton>
           </IconButtonGroup>
         )}
@@ -277,6 +270,6 @@ export const DiscussionThreadItemActions: FC<DiscussionThreadItemProps> = ({ ite
           </IconButtonGroup>
         )}
       </Flex>
-    </>
+    </Flex>
   );
 };

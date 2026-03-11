@@ -9,7 +9,6 @@ import { LoadingIndicatorOverlay } from '../../components/LoadingIndicatorOverla
 import { AllowedActions } from '../../types';
 import { getMessage } from '../../utils';
 import { ModeratorResponse } from './ModeratorResponse';
-import {CustomDiscussionThreadItem} from '../../components/CustomDiscussionThreadItem';
 
 type DiscussionThreadProps = {
   readonly allowedActions: AllowedActions;
@@ -33,22 +32,21 @@ export const DiscussionThread: FC<DiscussionThreadProps> = ({ isReloading, level
         >
           {getMessage('page.details.panel.discussion', 'Discussion')}
         </Typography>
-        {
-          rootThread && (
-            <Link
-              href={rootThread.id}
-              startIcon={<ArrowUp />}
-            >
-              {getMessage('page.details.panel.discussion.nav.back', 'Go top')}
-            </Link>
-          )}
+        {rootThread && (
+          <Link
+            href={rootThread.id}
+            startIcon={<ArrowUp />}
+          >
+            {getMessage('page.details.panel.discussion.nav.back', 'Go top')}
+          </Link>
+        )}
       </Flex>
       <Flex as="ul" direction="column" alignItems="flex-start" style={{marginBottom: 4}}>
         {level.map((item) => {
           const isSelected = selected?.id === item.id;
           const isThreadAuthor = !isNil(selected?.threadOf?.author?.id) && selected?.threadOf?.author?.id === item?.author?.id;
           return (
-            <CustomDiscussionThreadItem
+            <DiscussionThreadItem
               key={`comment-${item.id}`}
               item={item as unknown as any}
               root={isNil(rootThread)}
