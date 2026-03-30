@@ -3,6 +3,36 @@ import { StrapiRoute } from '../@types';
 const routes: StrapiRoute<'client'>[] = [
   {
     method: 'GET',
+    path: '/resources/recent',
+    handler: 'client.getLastCommentedResources',
+    config: {
+      policies: [],
+      description:
+        'Get the list of the X most recently commented resources',
+      tag: {
+        plugin: 'comments',
+        name: 'Comments',
+        actionType: 'find',
+      },
+    },
+  },
+  {
+    method: 'POST',
+    path: '/ratings/average',
+    handler: 'client.getRatingsAverage',
+    config: {
+      policies: [],
+      description:
+        'Get average ratings and count for a list of documentIds',
+      tag: {
+        plugin: 'comments',
+        name: 'Comments',
+        actionType: 'find',
+      },
+    },
+  },
+  {
+    method: 'GET',
     path: '/:relation',
     handler: 'client.findAllInHierarchy',
     config: {

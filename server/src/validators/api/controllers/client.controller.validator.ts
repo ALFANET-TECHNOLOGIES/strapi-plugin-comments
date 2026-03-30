@@ -254,3 +254,33 @@ export const removeCommentValidator = (enabledCollections: string[], payload: ob
 export type RemoveCommentValidatorSchema = ExtractRightEither<
   ReturnType<typeof removeCommentValidator>
 >;
+
+const getRatingsStatsSchema = () => {
+  return z.object({
+    documentIds: z.array(z.string()),
+    locale: z.string().optional(),
+  });
+};
+
+export const ratingsStatsValidator = (payload: object) => {
+  return validate(getRatingsStatsSchema().safeParse(payload));
+};
+
+export type RatingsStatsValidatorSchema = ExtractRightEither<
+  ReturnType<typeof ratingsStatsValidator>
+>;
+
+const getLastCommentedResourcesSchema = () => {
+  return z.object({
+    limit: stringToNumberValidator.pipe(z.number().max(100).min(1)).optional().default(10),
+    locale: z.string().optional(),
+  });
+};
+
+export const lastCommentedResourcesValidator = (payload: object) => {
+  return validate(getLastCommentedResourcesSchema().safeParse(payload));
+};
+
+export type LastCommentedResourcesSchema = ExtractRightEither<
+  ReturnType<typeof lastCommentedResourcesValidator>
+>;

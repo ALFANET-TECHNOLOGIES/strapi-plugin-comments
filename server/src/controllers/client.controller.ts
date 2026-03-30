@@ -7,6 +7,7 @@ import { getPluginService } from '../utils/getPluginService';
 import { throwError } from '../utils/throwError';
 import { client as clientValidator } from '../validators/api';
 import { flatInput } from './utils/parsers';
+import {LastCommentedResourcesSchema} from '../validators/api/controllers/client.controller.validator';
 
 const controllers = ({ strapi }: StrapiContext) => ({
   getService<T extends keyof PluginServices>(name: T): PluginServices[T] {
@@ -131,6 +132,24 @@ const controllers = ({ strapi }: StrapiContext) => ({
       throw throwError(ctx, unwrapEither(result));
     }
     throw throwError(ctx, unwrapEither(configResult));
+  },
+
+  async getRatingsAverage(ctx: RequestContext<{ documentIds: string[] }>) {
+    const result = clientValidator.ratingsStatsValidator(ctx.request.body);
+    if (isRight(result)) {
+      const { documentIds, locale } = result.right as clientValidator.RatingsStatsValidatorSchema;
+      return this.getService('common').getRatingsAverage({ documentIds, locale });
+    }
+    throw throwError(ctx, unwrapEither(result));
+  },
+
+  async getLastCommentedResources(ctx: RequestContext) {
+    const result = clientValidator.lastCommentedResourcesValidator(ctx.query);
+    if (isRight(result)) {
+      const { limit, locale } = result.right as clientValidator.LastCommentedResourcesSchema;
+      return this.getService('common').getLastCommentedResources({ limit, locale });
+    }
+    throw throwError(ctx, unwrapEither(result));
   },
 });
 

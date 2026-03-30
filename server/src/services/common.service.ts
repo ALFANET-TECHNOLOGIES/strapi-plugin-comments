@@ -1,27 +1,18 @@
-import { Params } from '@strapi/database/dist/entity-manager/types';
-import { UID } from '@strapi/strapi';
-import {
-  first,
-  get,
-  isNil,
-  isObject,
-  isString,
-  omit as filterItem,
-  parseInt,
-  uniq,
-} from 'lodash';
-import { isProfane, replaceProfanities } from 'no-profanity';
-import { Id, PathTo, PathValue, RelatedEntity, StrapiContext } from '../@types';
-import { CommentsPluginConfig } from '../config';
-import { ContentTypesUUIDs } from '../content-types';
-import { getCommentRepository, getStoreRepository } from '../repositories';
-import { getOrderBy } from '../repositories/utils';
-import { CONFIG_PARAMS } from '../utils/constants';
+import {Params} from '@strapi/database/dist/entity-manager/types';
+import {UID} from '@strapi/strapi';
+import {first, get, isNil, isObject, isString, omit as filterItem, parseInt, uniq} from 'lodash';
+import {isProfane, replaceProfanities} from 'no-profanity';
+import {Id, PathTo, PathValue, RelatedEntity, StrapiContext} from '../@types';
+import {CommentsPluginConfig} from '../config';
+import {ContentTypesUUIDs} from '../content-types';
+import {getCommentRepository, getStoreRepository} from '../repositories';
+import {getOrderBy} from '../repositories/utils';
+import {CONFIG_PARAMS} from '../utils/constants';
 import PluginError from '../utils/PluginError';
-import { client as clientValidator } from '../validators/api';
-import { Comment, CommentRelated, CommentWithRelated } from '../validators/repositories';
-import { Pagination } from '../validators/repositories/utils';
-import { buildAuthorModel, filterOurResolvedReports, getRelatedGroups } from './utils/functions';
+import {client as clientValidator} from '../validators/api';
+import {Comment, CommentRelated, CommentWithRelated} from '../validators/repositories';
+import {Pagination} from '../validators/repositories/utils';
+import {buildAuthorModel, filterOurResolvedReports, getRelatedGroups} from './utils/functions';
 import sanitizeHtml from 'sanitize-html';
 
 
@@ -37,6 +28,18 @@ type ParsedRelation = {
 type Created = PathTo<CommentsPluginConfig>;
 
 const commonService = ({ strapi }: StrapiContext) => ({
+  buildPopulateForRelated(uid: UID.ContentType): Record<string, any> {
+    const model = (strapi as any).getModel?.(uid);
+    const attributes = model?.attributes || {};
+
+    return Object.entries(attributes).reduce((acc: Record<string, any>, [key, attribute]: [string, any]) => {
+      if (attribute?.type === 'component' || attribute?.type === 'dynamiczone') {
+        acc[key] = { populate: '*' };
+      }
+      return acc;
+    }, {});
+  },
+
   async getConfig<T extends Created>(prop?: T, defaultValue?: PathValue<CommentsPluginConfig, T>, useLocal = false): Promise<PathValue<CommentsPluginConfig, T>> {
     const storeRepository = getStoreRepository(strapi);
     const config = await storeRepository.getConfig();
@@ -394,12 +397,14 @@ const commonService = ({ strapi }: StrapiContext) => ({
     return Promise.all(
       Object.entries(data).map(
         async ([relatedUid, { documentIds, locale }]) => {
+          const populate = this.buildPopulateForRelated(relatedUid as unknown as UID.ContentType);
           return Promise.all(
             documentIds.map((documentId, index) =>
               strapi.documents(relatedUid as ContentTypesUUIDs).findOne({
                 documentId: documentId.toString(),
                 locale: !isNil(locale[index]) ? locale[index] : undefined,
                 status: 'published',
+                ...(Object.keys(populate).length > 0 ? { populate } : {}),
               }),
             ),
           ).then((relatedEntities) => relatedEntities
@@ -514,6 +519,115 @@ const commonService = ({ strapi }: StrapiContext) => ({
   },
 
   async runLifecycleHook(/*{ contentTypeName, event, hookName }*/) {
+  },
+
+  async getLastCommentedResources(
+    { limit, locale }: { limit: number; locale?: string }
+  ): Promise<Array<{
+    comment: CommentWithRelated;
+    commentsCount: number;
+  }>> {
+    const modelUid = 'plugin::comments.comment';
+
+    const comments = await strapi.documents(modelUid).findMany({
+      filters: {
+        $or: [
+          { removed: { $null: true } },
+          { removed: false },
+        ],
+        $and: [
+          { $or: [{ blocked: { $null: true } }, { blocked: false }] },
+        ],
+        threadOf: { $null: true },
+        approvalStatus: 'APPROVED',
+        rating: { $notNull: true },
+        ...(locale ? { locale } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+    }) as Array<Comment>;
+
+    const resourcesMap = new Map<string, {
+      lastCommentDate: string;
+      commentCount: number;
+      lastComment: Comment;
+    }>();
+
+    for (const comment of comments) {
+      console.log(comment.content);
+      const existing = resourcesMap.get(comment.related);
+      if (existing) {
+        existing.commentCount += 1;
+      } else {
+        resourcesMap.set(comment.related, {
+          lastCommentDate: comment.createdAt,
+          commentCount: 1,
+          lastComment: comment,
+        });
+      }
+    }
+
+    const sortedResources = Array.from(resourcesMap.entries())
+      .sort((entryA, entryB) =>
+        new Date(entryB[1].lastCommentDate).getTime() -
+        new Date(entryA[1].lastCommentDate).getTime()
+      )
+      .slice(0, limit);
+
+    const lastComments = sortedResources.map(([, data]) => data.lastComment);
+    const relatedEntities = await this.findRelatedEntitiesFor(lastComments);
+
+    return sortedResources.map(([, data]) => ({
+      comment: this.mergeRelatedEntityTo(data.lastComment, relatedEntities),
+      commentsCount: data.commentCount,
+    }));
+  },
+
+  async getRatingsAverage(
+    { documentIds, locale }: { documentIds: string[]; locale?: string }
+  ): Promise<Array<{
+    documentId: string;
+    moyenneNotes: number | null;
+    nombreNotes: number;
+  }>> {
+    const modelUid = 'plugin::comments.comment';
+    if (documentIds.length === 0) {
+      return [];
+    }
+    return await Promise.all(
+      documentIds.map(async (documentId: string) => {
+        const commentaires = await strapi.query(modelUid).findMany({
+          where: {
+            related: {$contains: documentId},
+            rating: {$notNull: true},
+            $or: [
+              {removed: {$null: true}},
+              {removed: false},
+            ],
+            $and: [
+              {$or: [{blocked: {$null: true}}, {blocked: false}]},
+            ],
+            approvalStatus: 'APPROVED',
+            ...(locale ? {locale} : {}),
+          },
+          select: ['rating', 'removed', 'blocked', 'approvalStatus', 'locale'],
+        }) as Array<{ rating: number | null }>;
+
+        const notesValides = commentaires
+          .map((commentaire) => commentaire.rating)
+          .filter((note): note is number => note !== null && note !== undefined);
+
+        const nombreNotes = notesValides.length;
+        const moyenneNotes = nombreNotes > 0
+          ? Math.round((notesValides.reduce((somme, note) => somme + note, 0) / nombreNotes) * 100) / 100
+          : null;
+
+        return {
+          documentId,
+          moyenneNotes,
+          nombreNotes,
+        };
+      })
+    );
   },
 });
 
