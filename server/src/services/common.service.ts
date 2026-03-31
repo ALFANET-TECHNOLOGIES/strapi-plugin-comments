@@ -538,12 +538,12 @@ const commonService = ({ strapi }: StrapiContext) => ({
         $and: [
           { $or: [{ blocked: { $null: true } }, { blocked: false }] },
         ],
-        threadOf: { $null: true },
+        // threadOf: { $null: true },
         approvalStatus: 'APPROVED',
         rating: { $notNull: true },
         ...(locale ? { locale } : {}),
       },
-      orderBy: { createdAt: 'desc' },
+      sort: 'createdAt:desc',
     }) as Array<Comment>;
 
     const resourcesMap = new Map<string, {
@@ -553,7 +553,7 @@ const commonService = ({ strapi }: StrapiContext) => ({
     }>();
 
     for (const comment of comments) {
-      console.log(comment.content);
+      console.log(comment.createdAt, comment.id);
       const existing = resourcesMap.get(comment.related);
       if (existing) {
         existing.commentCount += 1;
