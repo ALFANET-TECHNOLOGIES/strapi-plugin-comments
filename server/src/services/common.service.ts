@@ -552,8 +552,9 @@ const commonService = ({ strapi }: StrapiContext) => ({
       lastComment: Comment;
     }>();
 
+    const blockedAuthorProps: string[] = await this.getConfig(CONFIG_PARAMS.AUTHOR_BLOCKED_PROPS, ['email']);
+
     for (const comment of comments) {
-      console.log(comment.createdAt, comment.id);
       const existing = resourcesMap.get(comment.related);
       if (existing) {
         existing.commentCount += 1;
@@ -561,7 +562,7 @@ const commonService = ({ strapi }: StrapiContext) => ({
         resourcesMap.set(comment.related, {
           lastCommentDate: comment.createdAt,
           commentCount: 1,
-          lastComment: comment,
+          lastComment: this.sanitizeCommentEntity(comment, blockedAuthorProps),
         });
       }
     }

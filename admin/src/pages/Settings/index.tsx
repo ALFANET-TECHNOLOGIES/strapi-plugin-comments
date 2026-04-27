@@ -92,7 +92,7 @@ const Settings = () => {
     (values: any) => {
       updateSettingsMutation.mutate({
         ...values,
-        blockedAuthorProps: values.blockedAuthorProps.split(',').map((prop: string) => prop.trim()),
+        blockedAuthorProps: values.blockedAuthorProps.split(',').map((prop: string) => prop.trim()).filter(Boolean),
       });
     },
     [updateSettingsMutation]

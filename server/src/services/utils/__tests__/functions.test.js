@@ -125,6 +125,21 @@ describe('Test service functions utils', () => {
       expect(result.author).not.toHaveProperty('email');
       expect(result.author).toMatchObject({ id: 10, name: 'john' });
     });
+
+    test('filters blocked author props for authorUser', () => {
+      const item = {
+        id: 1,
+        authorUser: {
+          id: 10,
+          username: 'john',
+          email: 'john@test.com',
+        },
+        content: 'test',
+      };
+      const result = buildAuthorModel(item, ['email'], []);
+      expect(result.author).not.toHaveProperty('email');
+      expect(result.author).toMatchObject({ id: 10, name: 'john' });
+    });
   });
 
   describe('getAuthorName', () => {
