@@ -1,6 +1,6 @@
 {
   "name": "@alfanet-technologies/strapi-plugin-comments",
-  "version": "3.2.6",
+  "version": "3.2.7",
   "description": "Strapi - Comments plugin",
   "strapi": {
     "name": "comments",

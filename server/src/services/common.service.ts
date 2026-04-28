@@ -528,59 +528,99 @@ const commonService = ({ strapi }: StrapiContext) => ({
     commentsCount: number;
   }>> {
     const modelUid = 'plugin::comments.comment';
+    const blockedAuthorProps: string[] = await this.getConfig(
+      CONFIG_PARAMS.AUTHOR_BLOCKED_PROPS,
+      ['email']
+    );
 
-    const comments = await strapi.documents(modelUid).findMany({
-      filters: {
-        $or: [
-          { removed: { $null: true } },
-          { removed: false },
-        ],
-        $and: [
-          { $or: [{ blocked: { $null: true } }, { blocked: false }] },
-        ],
-        // threadOf: { $null: true },
-        approvalStatus: 'APPROVED',
-        rating: { $notNull: true },
-        ...(locale ? { locale } : {}),
-      },
-      sort: 'createdAt:desc',
-    }) as Array<Comment>;
+    const resultatFinal: Array<{
+      comment: CommentWithRelated;
+      commentsCount: number;
+    }> = [];
 
-    const resourcesMap = new Map<string, {
-      lastCommentDate: string;
-      commentCount: number;
-      lastComment: Comment;
-    }>();
+    const ressourcesTraitees = new Set<string>();
+    const tailleParLot: number = Math.max(limit * 3, 20);
+    let decalage: number = 0;
 
-    const blockedAuthorProps: string[] = await this.getConfig(CONFIG_PARAMS.AUTHOR_BLOCKED_PROPS, ['email']);
+    while (resultatFinal.length < limit) {
+      const commentaires = await strapi.documents(modelUid).findMany({
+        filters: {
+          $or: [
+            { removed: { $null: true } },
+            { removed: false },
+          ],
+          $and: [
+            { $or: [{ blocked: { $null: true } }, { blocked: false }] },
+          ],
+          approvalStatus: 'APPROVED',
+          rating: { $notNull: true },
+          ...(locale ? { locale } : {}),
+        },
+        sort: 'createdAt:desc',
+        limit: tailleParLot,
+        offset: decalage,
+      }) as Array<Comment>;
 
-    for (const comment of comments) {
-      const existing = resourcesMap.get(comment.related);
-      if (existing) {
-        existing.commentCount += 1;
-      } else {
-        resourcesMap.set(comment.related, {
-          lastCommentDate: comment.createdAt,
-          commentCount: 1,
-          lastComment: this.sanitizeCommentEntity(comment, blockedAuthorProps),
+      if (commentaires.length === 0) {
+        break;
+      }
+
+      for (const commentaire of commentaires) {
+        if (resultatFinal.length >= limit) {
+          break;
+        }
+
+        const identifiantRessource = commentaire.related;
+        if (ressourcesTraitees.has(identifiantRessource)) {
+          continue;
+        }
+
+        ressourcesTraitees.add(identifiantRessource);
+
+        const { uid, relatedId } = this.parseRelationString(identifiantRessource);
+        const entiteRelated = await strapi.documents(uid).findOne({
+          documentId: relatedId,
+          locale: commentaire.locale || undefined,
+          status: 'published',
+        });
+
+        if (!entiteRelated) {
+          continue;
+        }
+
+        const nombreCommentaires = await strapi.documents(modelUid).count({
+          filters: {
+            related: identifiantRessource,
+            $or: [
+              { removed: { $null: true } },
+              { removed: false },
+            ],
+            $and: [
+              { $or: [{ blocked: { $null: true } }, { blocked: false }] },
+            ],
+            approvalStatus: 'APPROVED',
+            ...(locale ? { locale } : {}),
+          },
+        });
+
+        const commentaireSanitise = this.sanitizeCommentEntity(
+          commentaire,
+          blockedAuthorProps
+        );
+
+        resultatFinal.push({
+          comment: {
+            ...commentaireSanitise,
+            related: { ...entiteRelated, uid },
+          } as CommentWithRelated,
+          commentsCount: nombreCommentaires,
         });
       }
+
+      decalage += tailleParLot;
     }
 
-    const sortedResources = Array.from(resourcesMap.entries())
-      .sort((entryA, entryB) =>
-        new Date(entryB[1].lastCommentDate).getTime() -
-        new Date(entryA[1].lastCommentDate).getTime()
-      )
-      .slice(0, limit);
-
-    const lastComments = sortedResources.map(([, data]) => data.lastComment);
-    const relatedEntities = await this.findRelatedEntitiesFor(lastComments);
-
-    return sortedResources.map(([, data]) => ({
-      comment: this.mergeRelatedEntityTo(data.lastComment, relatedEntities),
-      commentsCount: data.commentCount,
-    }));
+    return resultatFinal;
   },
 
   async getRatingsAverage(
