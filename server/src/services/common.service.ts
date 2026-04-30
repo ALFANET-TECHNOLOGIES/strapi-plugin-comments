@@ -14,6 +14,7 @@ import {Comment, CommentRelated, CommentWithRelated} from '../validators/reposit
 import {Pagination} from '../validators/repositories/utils';
 import {buildAuthorModel, filterOurResolvedReports, getRelatedGroups} from './utils/functions';
 import sanitizeHtml from 'sanitize-html';
+import {AnyDocument} from '@strapi/types/dist/modules/documents';
 
 
 const PAGE_SIZE = 10;
@@ -533,17 +534,21 @@ const commonService = ({ strapi }: StrapiContext) => ({
       ['email']
     );
 
-    const resultatFinal: Array<{
+    const finalResult: Array<{
       comment: CommentWithRelated;
       commentsCount: number;
     }> = [];
 
     const ressourcesTraitees = new Set<string>();
-    const tailleParLot: number = Math.max(limit * 3, 20);
-    let decalage: number = 0;
+    const batchSize: number = Math.max(limit * 3, 20);
+    let offset: number = 0;
+    const maxIterations: number = 100;
+    let currentIteration: number = 0;
 
-    while (resultatFinal.length < limit) {
-      const commentaires = await strapi.documents(modelUid).findMany({
+    while (finalResult.length < limit && currentIteration < maxIterations) {
+      console.log(currentIteration);
+      currentIteration++;
+      const comments = await strapi.documents(modelUid).findMany({
         filters: {
           $or: [
             { removed: { $null: true } },
@@ -557,40 +562,42 @@ const commonService = ({ strapi }: StrapiContext) => ({
           ...(locale ? { locale } : {}),
         },
         sort: 'createdAt:desc',
-        limit: tailleParLot,
-        offset: decalage,
+        pagination: {
+          limit: batchSize,
+          offset: offset,
+        },
       }) as Array<Comment>;
 
-      if (commentaires.length === 0) {
+      if (comments.length === 0) {
         break;
       }
 
-      for (const commentaire of commentaires) {
-        if (resultatFinal.length >= limit) {
+      for (const comment of comments) {
+        if (finalResult.length >= limit) {
           break;
         }
 
-        const identifiantRessource = commentaire.related;
-        if (ressourcesTraitees.has(identifiantRessource)) {
+        const resourceIdentifier: string = comment.related;
+        if (ressourcesTraitees.has(resourceIdentifier)) {
           continue;
         }
 
-        ressourcesTraitees.add(identifiantRessource);
+        ressourcesTraitees.add(resourceIdentifier);
 
-        const { uid, relatedId } = this.parseRelationString(identifiantRessource);
-        const entiteRelated = await strapi.documents(uid).findOne({
+        const { uid, relatedId } = this.parseRelationString(resourceIdentifier);
+        const entityRelated: AnyDocument = await strapi.documents(uid).findOne({
           documentId: relatedId,
-          locale: commentaire.locale || undefined,
+          locale: comment.locale || undefined,
           status: 'published',
         });
 
-        if (!entiteRelated) {
+        if (!entityRelated) {
           continue;
         }
 
-        const nombreCommentaires = await strapi.documents(modelUid).count({
+        const commentCount = await strapi.documents(modelUid).count({
           filters: {
-            related: identifiantRessource,
+            related: resourceIdentifier,
             $or: [
               { removed: { $null: true } },
               { removed: false },
@@ -603,28 +610,28 @@ const commonService = ({ strapi }: StrapiContext) => ({
           },
         });
 
-        const commentaireSanitise = this.sanitizeCommentEntity(
-          commentaire,
+        const sanitizedComment = this.sanitizeCommentEntity(
+          comment,
           blockedAuthorProps
         );
 
-        resultatFinal.push({
+        finalResult.push({
           comment: {
-            ...commentaireSanitise,
-            related: { ...entiteRelated, uid },
+            ...sanitizedComment,
+            related: { ...entityRelated, uid },
           } as CommentWithRelated,
-          commentsCount: nombreCommentaires,
+          commentsCount: commentCount,
         });
       }
 
-      if (commentaires.length < tailleParLot) {
+      if (comments.length < batchSize) {
         break;
       }
 
-      decalage += tailleParLot;
+      offset += batchSize;
     }
 
-    return resultatFinal;
+    return finalResult;
   },
 
   async getRatingsAverage(
