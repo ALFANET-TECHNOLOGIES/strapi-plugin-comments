@@ -617,6 +617,10 @@ const commonService = ({ strapi }: StrapiContext) => ({
         });
       }
 
+      if (commentaires.length < tailleParLot) {
+        break;
+      }
+
       decalage += tailleParLot;
     }
 
