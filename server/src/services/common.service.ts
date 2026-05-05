@@ -199,10 +199,11 @@ const commonService = ({ strapi }: StrapiContext) => ({
       };
     }
 
+    const { rating, ...filtersWithoutRating } = filters;
     const children = await this.findAllFlat(
       {
         filters: {
-          ...filters,
+          ...filtersWithoutRating,
           threadOf: { $eq: entry.id.toString() },
         },
         populate,
